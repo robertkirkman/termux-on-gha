@@ -4,12 +4,23 @@ on: [push, pull_request]
 jobs:
   # This is what is currently necessary to make termux-docker work with GHA.
   working:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: i686
+          - runner: ubuntu-24.04
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            architecture: arm
+          - runner: ubuntu-24.04-arm
+            architecture: aarch64
+    runs-on: ${{ matrix.runner }}
     # prepare writable volume prefix mount for actions/upload-artifact,
     # based on the higher-profile workaround for 32-bit GNU/Linux containers explained here
     # https://github.com/actions/upload-artifact/issues/616#issuecomment-2350667347
     container:
-      image: termux/termux-docker:x86_64
+      image: termux/termux-docker:${{ matrix.architecture }}
       volumes: 
         - /tmp/node20:/__e/node20
     # approximate environment variables for actions that can't be forced to use entrypoint.sh
@@ -24,6 +35,10 @@ jobs:
       LANG: en_US.UTF-8
       TZ: UTC
     steps:
+      - name: set pkg command to use the packages-cf.termux.dev mirror
+        run: ln -sf ${PREFIX}/etc/termux/mirrors/default ${PREFIX}/etc/termux/chosen_mirrors
+      - name: upgrade all packages to prepare for installing nodejs
+        run: /entrypoint.sh bash -c "yes | pkg upgrade -y"
       # actions/checkout will "think" that termux's tar binary isn't executable if it doesn't have
       # executable bit actually set for all users, since even though that permissions restriction
       # doesn't actually apply to the root user (at least on Android), GitHub Actions' internal
@@ -49,7 +64,7 @@ jobs:
         run: touch artifact
       - uses: actions/upload-artifact@v4.6.0
         with:
-          name: artifact
+          name: artifact-${{ matrix.architecture }}
           path: artifact
 
   # This is the ideal way termux-docker would work with GHA.
